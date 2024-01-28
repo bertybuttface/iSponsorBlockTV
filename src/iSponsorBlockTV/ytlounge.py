@@ -94,7 +94,7 @@ class YtLoungeApi(pyytlounge.YtLoungeApi):
             if len(args) > 0 and (
                 vid_id := args[0]["videoId"]
             ):  # if video id is not empty
-                print(f"Getting segments for next video: {vid_id}")
+                self._logger.info(f"Getting segments for next video: {vid_id}")
                 create_task(self.api_helper.get_segments(vid_id))
 
         # #Used to know if an ad is skippable or not
