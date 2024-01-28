@@ -22,3 +22,5 @@ youtube_client_blacklist = ["TVHTML5_FOR_KIDS"]
 
 
 config_file_blacklist_keys = ["config_file", "data_dir"]
+
+min_gap_to_merge = 1 # seconds
