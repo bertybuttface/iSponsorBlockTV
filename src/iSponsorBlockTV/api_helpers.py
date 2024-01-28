@@ -150,34 +150,38 @@ class ApiHelper:
 
     @staticmethod
     def process_segments(response):
-        segments = []
-        ignore_ttl = True
-        try:
-            for i in response["segments"]:
-                ignore_ttl = (
-                    ignore_ttl and i["locked"] == 1
-                )  # If all segments are locked, ignore ttl
-                segment = i["segment"]
-                UUID = i["UUID"]
-                segment_dict = {"start": segment[0], "end": segment[1], "UUID": [UUID]}
-                try:
-                    # Get segment before to check if they are too close to each other
-                    segment_before_end = segments[-1]["end"]
-                    segment_before_start = segments[-1]["start"]
-                    segment_before_UUID = segments[-1]["UUID"]
+        if "segments" not in response:
+            return [], True
 
-                except Exception:
-                    segment_before_end = -10
-                if (
-                    segment_dict["start"] - segment_before_end < 1
-                ):  # Less than 1 second apart, combine them and skip them together
-                    segment_dict["start"] = segment_before_start
-                    segment_dict["UUID"].extend(segment_before_UUID)
-                    segments.pop()
-                segments.append(segment_dict)
-        except Exception:
-            pass
-        return segments, ignore_ttl
+        for seg in response["segments"]:
+            if not isinstance(seg, dict) or "segment" not in seg or not isinstance(seg["segment"], list):
+                raise TypeError("Invalid segment structure")
+
+        # Sort segments by their start time
+        sorted_segments = sorted(response["segments"], key=lambda x: x["segment"][0])
+
+        merged_segments = []
+        ignore_ttl = True
+        for segment in sorted_segments:
+            ignore_ttl = ignore_ttl and segment.get("locked") == 1
+            segment["UUID"] = [segment["UUID"]]  
+            if not merged_segments:
+                # First segment, just add it
+                merged_segments.append(segment) 
+            elif segment["segment"][0] - merged_segments[-1]["segment"][1] < constants.min_gap_to_merge:
+                # Merge if segments are less than constant.min_gap_to_merge seconds apart
+                merged_segments[-1]["segment"][1] = segment["segment"][1]
+                merged_segments[-1]["UUID"].extend(segment["UUID"])
+            elif segment["segment"][0] <= merged_segments[-1]["segment"][1]:
+                # Merge if segments are overlapping 
+                merged_segments[-1]["segment"][1] = max(merged_segments[-1]["segment"][1], segment["segment"][1])
+                merged_segments[-1]["UUID"].extend(segment["UUID"])
+            else:
+                # Non-overlapping segment, make UUIDs append
+                merged_segments.append(segment)
+
+        output_segments = [{"start": seg["segment"][0], "end": seg["segment"][1], "UUID": seg["UUID"]} for seg in merged_segments]
+        return output_segments, ignore_ttl
 
     async def mark_viewed_segments(self, uuids):
         """Marks the segments as viewed in the SponsorBlock API, if skip_count_tracking is enabled.
