@@ -10,7 +10,16 @@ from . import api_helpers, webhook_helpers, ytlounge
 
 
 class DeviceListener:
-    def __init__(self, api_helper, webhook_helper, config, device, debug: bool, web_session, webhook_session):
+    def __init__(
+        self,
+        api_helper,
+        webhook_helper,
+        config,
+        device,
+        debug: bool,
+        web_session,
+        webhook_session,
+    ):
         self.task: Optional[asyncio.Task] = None
         self.api_helper = api_helper
         self.webhook_helper = webhook_helper
@@ -137,7 +146,7 @@ class DeviceListener:
                 video_id=self.lounge_controller.current_video,
                 device_name=self.name,
                 skip_position=position,
-                segment_uuid=uuids
+                segment_uuid=uuids,
             )
         )
         await asyncio.create_task(self.lounge_controller.seek_to(position))
@@ -185,7 +194,9 @@ def main(config, debug):
     webhook_session = aiohttp.ClientSession(loop=loop, connector=tcp_connector)
     webhook_helper = webhook_helpers.WebhookHelper(config, webhook_session)
     for i in config.devices:
-        device = DeviceListener(api_helper, webhook_helper, config, i, debug, web_session, webhook_session)
+        device = DeviceListener(
+            api_helper, webhook_helper, config, i, debug, web_session, webhook_session
+        )
         devices.append(device)
         tasks.append(loop.create_task(device.loop()))
         tasks.append(loop.create_task(device.refresh_auth_loop()))
@@ -195,7 +206,9 @@ def main(config, debug):
         loop.run_forever()
     except KeyboardInterrupt:
         print("Cancelling tasks and exiting...")
-        loop.run_until_complete(finish(devices, web_session, webhook_session, tcp_connector))
+        loop.run_until_complete(
+            finish(devices, web_session, webhook_session, tcp_connector)
+        )
         for task in tasks:
             task.cancel()
         loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
