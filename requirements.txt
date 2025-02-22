@@ -1,6 +1,8 @@
 aiohttp==3.11.12
 appdirs==1.4.4
 async-cache==1.1.1
+browserforge==1.2.3
+camoufox==0.4.11
 pydantic==2.10.6
 pyytlounge==2.1.2
 rich==13.9.4
