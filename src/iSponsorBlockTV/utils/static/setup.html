@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>iSponsorBlockTV Setup</title>
+    <style>
+        /* Base styles */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        
+        .container {
+            background-color: white;
+            padding: 20px;
+            padding-top: 5px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+        }
+        
+        h2 {
+            color: #3498db;
+        }
+        
+        h3 {
+            color: #555;
+            margin-top: 15px;
+        }
+        
+        /* Form elements */
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        input[type="text"], select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        button.danger {
+            background-color: #e74c3c;
+        }
+        
+        button.danger:hover {
+            background-color: #c0392b;
+        }
+        
+        /* Toggle switch */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .slider {
+            background-color: #2196F3;
+        }
+        
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        
+        /* Messages */
+        .message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        /* Devices list */
+        .devices-list {
+            margin-top: 20px;
+        }
+        
+        .device-item {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        /* Categories */
+        .categories {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .category-checkbox {
+            display: flex;
+            align-items: center;
+            margin-right: 15px;
+        }
+        
+        .category-checkbox input {
+        }
+        
+        .input-action {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .input-action input {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+    <h1>iSponsorBlockTV Setup</h1>
+    
+    <div class="container">
+        <h2>Devices</h2>
+        <h3>Pair a new device</h3>
+        <p>Enter the pairing code from your TV's YouTube app (Settings - Link with TV code)</p>
+        <div class="input-action">
+            <input type="text" id="pairingCode" placeholder="Enter pairing code">
+            <button onclick="pairDevice()">Pair Device</button>
+        </div>
+        <div id="pairResult"></div>
+        
+        <h3>Paired Devices</h3>
+        <p>These devices are already paired. You can delete them if you wish.</p>
+        <div id="devicesList" class="devices-list">
+            <!-- Devices will be populated here -->
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Configuration</h2>
+        
+        <h3>Skip Categories</h3>
+        <div class="categories" id="categoriesContainer">
+            <div class="category-checkbox">
+                <input type="checkbox" id="category-sponsor" value="sponsor">
+                <label for="category-sponsor">Sponsor</label>
+            </div>
+            <div class="category-checkbox">
+                <input type="checkbox" id="category-selfpromo" value="selfpromo">
+                <label for="category-selfpromo">Self Promotion</label>
+            </div>
+            <div class="category-checkbox">
+                <input type="checkbox" id="category-interaction" value="interaction">
+                <label for="category-interaction">Interaction Reminder</label>
+            </div>
+            <div class="category-checkbox">
+                <input type="checkbox" id="category-intro" value="intro">
+                <label for="category-intro">Intro</label>
+            </div>
+            <div class="category-checkbox">
+                <input type="checkbox" id="category-outro" value="outro">
+                <label for="category-outro">Outro</label>
+            </div>
+            <div class="category-checkbox">
+                <input type="checkbox" id="category-preview" value="preview">
+                <label for="category-preview">Preview</label>
+            </div>
+            <div class="category-checkbox">
+                <input type="checkbox" id="category-music_offtopic" value="music_offtopic">
+                <label for="category-music_offtopic">Music: Non-Music</label>
+            </div>
+            <div class="category-checkbox">
+                <input type="checkbox" id="category-filler" value="filler">
+                <label for="category-filler">Filler</label>
+            </div>
+        </div>
+
+        <h3>Options</h3>
+        <div class="form-group">
+            <div class="option-toggle">
+                <label class="switch">
+                    <input type="checkbox" id="skipCountTracking" checked>
+                    <span class="slider"></span>
+                </label>
+                <span>Report skipped segments</span>
+            </div>
+        </div>
+        <div class="form-group">
+            <div class="option-toggle">
+                <label class="switch">
+                    <input type="checkbox" id="muteAds">
+                    <span class="slider"></span>
+                </label>
+                <span>Mute ads</span>
+            </div>
+        </div>
+        <div class="form-group">
+            <div class="option-toggle">
+                <label class="switch">
+                    <input type="checkbox" id="skipAds">
+                    <span class="slider"></span>
+                </label>
+                <span>Skip ads</span>
+            </div>
+        </div>
+        <div class="form-group">
+            <div class="option-toggle">
+                <label class="switch">
+                    <input type="checkbox" id="autoPlay" checked>
+                    <span class="slider"></span>
+                </label>
+                <span>Enable autoplay</span>
+            </div>
+        </div>
+
+        <h3>YouTube API Key (Optional, only needed for channel whitelisting)</h3>
+        <div class="form-group">
+            <input type="text" id="apiKey" placeholder="Enter YouTube API key">
+        </div>
+
+        <button onclick="saveConfig()">Save Configuration</button>
+        <div id="saveResult"></div>
+    </div>
+
+    <script>
+        // Load current config on page load
+        document.addEventListener('DOMContentLoaded', loadConfig);
+        
+        async function loadConfig() {
+            try {
+                const response = await fetch('/config');
+                const config = await response.json();
+                
+                // Set toggle switches
+                document.getElementById('skipCountTracking').checked = config.skip_count_tracking;
+                document.getElementById('muteAds').checked = config.mute_ads;
+                document.getElementById('skipAds').checked = config.skip_ads;
+                document.getElementById('autoPlay').checked = config.auto_play;
+                document.getElementById('apiKey').value = config.apikey || '';
+                
+                // Set categories
+                const categories = config.skip_categories || [];
+                categories.forEach(category => {
+                    const checkbox = document.getElementById(`category-${category}`);
+                    if (checkbox) {
+                        checkbox.checked = true;
+                    }
+                });
+                
+                // Update devices list
+                updateDevicesList(config.devices);
+            } catch (error) {
+                console.error('Error loading config:', error);
+                showMessage('saveResult', 'Error loading configuration', false);
+            }
+        }
+        
+        function updateDevicesList(devices) {
+            const devicesList = document.getElementById('devicesList');
+            devicesList.innerHTML = '';
+            
+            if (devices && devices.length > 0) {
+                devices.forEach(device => {
+                    const deviceElement = document.createElement('div');
+                    deviceElement.className = 'device-item';
+                    deviceElement.innerHTML = `
+                        <div>
+                            <strong>${device.name}</strong>
+                            <div>ID: ${device.screen_id}</div>
+                        </div>
+                        <button class="danger" onclick="deleteDevice('${device.screen_id}')">Delete</button>
+                    `;
+                    devicesList.appendChild(deviceElement);
+                });
+            } else {
+                devicesList.innerHTML = '<div>No devices paired</div>';
+            }
+        }
+        
+        async function pairDevice() {
+            const code = document.getElementById('pairingCode').value;
+            const resultDiv = document.getElementById('pairResult');
+            
+            if (!code) {
+                showMessage('pairResult', 'Please enter a pairing code', false);
+                return;
+            }
+            
+            try {
+                const response = await fetch('/pair', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({pairing_code: code})
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showMessage('pairResult', `Successfully paired with ${data.device.name}`, true);
+                    // Reload the config to update the devices list
+                    loadConfig();
+                } else {
+                    showMessage('pairResult', data.error || 'Failed to pair device', false);
+                }
+            } catch (error) {
+                showMessage('pairResult', `Failed to pair device: ${error}`, false);
+            }
+        }
+        
+        async function deleteDevice(screenId) {
+            if (!confirm('Are you sure you want to delete this device?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/delete-device', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({screen_id: screenId})
+                });
+                
+                if (response.ok) {
+                    // Reload the config to update the devices list
+                    loadConfig();
+                    showMessage('pairResult', 'Device deleted successfully', true);
+                } else {
+                    const data = await response.json();
+                    showMessage('pairResult', data.error || 'Failed to delete device', false);
+                }
+            } catch (error) {
+                showMessage('pairResult', `Failed to delete device: ${error}`, false);
+            }
+        }
+        
+        async function saveConfig() {
+            // Get all checked categories
+            const checkedCategories = [];
+            document.querySelectorAll('#categoriesContainer input[type="checkbox"]:checked').forEach(checkbox => {
+                checkedCategories.push(checkbox.value);
+            });
+            
+            const config = {
+                skip_categories: checkedCategories,
+                skip_count_tracking: document.getElementById('skipCountTracking').checked,
+                mute_ads: document.getElementById('muteAds').checked,
+                skip_ads: document.getElementById('skipAds').checked,
+                auto_play: document.getElementById('autoPlay').checked,
+                apikey: document.getElementById('apiKey').value
+            };
+            
+            try {
+                const response = await fetch('/update', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(config)
+                });
+                
+                if (response.ok) {
+                    showMessage('saveResult', 'Configuration saved successfully', true);
+                } else {
+                    const data = await response.json();
+                    showMessage('saveResult', data.error || 'Failed to save configuration', false);
+                }
+            } catch (error) {
+                showMessage('saveResult', `Failed to save configuration: ${error}`, false);
+            }
+        }
+        
+        function showMessage(elementId, message, isSuccess) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="message ${isSuccess ? 'success' : 'error'}">${message}</div>`;
+            
+            // Clear message after 5 seconds
+            setTimeout(() => {
+                element.innerHTML = '';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
