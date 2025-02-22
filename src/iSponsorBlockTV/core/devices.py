@@ -1,12 +1,103 @@
 import asyncio
 import logging
 import time
+
 from signal import SIGINT, SIGTERM, signal
-from typing import Optional
+from typing import List, Optional
 
 import aiohttp
 
-from . import api_helpers, ytlounge
+from iSponsorBlockTV.core.youtube import YtLoungeApi
+from iSponsorBlockTV.core.sponsorblock import ApiHelper
+
+
+class DeviceManager:
+    def __init__(self, config, debug: bool = False):
+        self.config = config
+        self.debug = debug
+        self.loop: Optional[asyncio.AbstractEventLoop] = None
+        self.tasks: List[asyncio.Task] = []
+        self.devices: List[DeviceListener] = []
+        self.web_session: Optional[aiohttp.ClientSession] = None
+        self.tcp_connector: Optional[aiohttp.TCPConnector] = None
+        self.api_helper: Optional[ApiHelper] = None
+        
+        if debug:
+            logging.getLogger().setLevel(logging.DEBUG)
+
+    async def initialize(self):
+        """Initialize network resources and create device listeners"""
+        self.loop = asyncio.get_event_loop()
+        if self.debug:
+            self.loop.set_debug(True)
+            
+        self.tcp_connector = aiohttp.TCPConnector(ttl_dns_cache=300)
+        self.web_session = aiohttp.ClientSession(connector=self.tcp_connector)
+        self.api_helper = ApiHelper(self.config, self.web_session)
+
+        # Initialize devices
+        for device_config in self.config.devices:
+            device = DeviceListener(
+                self.api_helper, 
+                self.config, 
+                device_config, 
+                self.debug,
+                self.web_session
+            )
+            self.devices.append(device)
+            await device.initialize_web_session()
+            
+            # Create device tasks
+            self.tasks.append(self.loop.create_task(device.loop()))
+            self.tasks.append(self.loop.create_task(device.refresh_auth_loop()))
+
+    async def cleanup(self):
+        """Clean up all resources"""
+        # Cancel all device tasks
+        await asyncio.gather(
+            *(device.cancel() for device in self.devices), 
+            return_exceptions=True
+        )
+        
+        # Cancel all pending tasks
+        for task in self.tasks:
+            task.cancel()
+        await asyncio.gather(*self.tasks, return_exceptions=True)
+        
+        # Close network resources
+        if self.web_session:
+            await self.web_session.close()
+        if self.tcp_connector:
+            await self.tcp_connector.close()
+        if self.loop:
+            self.loop.close()
+
+    def handle_signal(self, signum, frame):
+        """Handle system signals"""
+        raise KeyboardInterrupt()
+
+    async def run_async(self):
+        """Main async execution loop"""
+        try:
+            await self.initialize()
+            
+            # Set up signal handlers
+            signal(SIGTERM, self.handle_signal)
+            signal(SIGINT, self.handle_signal)
+            
+            # Wait for all tasks to complete
+            await asyncio.gather(*self.tasks)
+            
+        except KeyboardInterrupt:
+            print("Cancelling tasks and exiting...")
+        finally:
+            await self.cleanup()
+            print("Exited")
+
+    def run(self):
+        """Main entry point"""
+        self.loop = asyncio.get_event_loop()
+        self.loop.run_until_complete(self.run_async())
 
 
 class DeviceListener:
@@ -28,7 +119,7 @@ class DeviceListener:
         )
         self.logger.addHandler(sh)
         self.logger.info("Starting device")
-        self.lounge_controller = ytlounge.YtLoungeApi(
+        self.lounge_controller = YtLoungeApi(
             device.screen_id, config, api_helper, self.logger
         )
 
@@ -149,53 +240,3 @@ class DeviceListener:
 
     async def initialize_web_session(self):
         await self.lounge_controller.change_web_session(self.web_session)
-
-
-async def finish(devices, web_session, tcp_connector):
-    await asyncio.gather(
-        *(device.cancel() for device in devices), return_exceptions=True
-    )
-    await web_session.close()
-    await tcp_connector.close()
-
-
-def handle_signal(signum, frame):
-    raise KeyboardInterrupt()
-
-
-async def main_async(config, debug):
-    loop = asyncio.get_event_loop_policy().get_event_loop()
-    tasks = []  # Save the tasks so the interpreter doesn't garbage collect them
-    devices = []  # Save the devices to close them later
-    if debug:
-        loop.set_debug(True)
-    tcp_connector = aiohttp.TCPConnector(ttl_dns_cache=300)
-    web_session = aiohttp.ClientSession(connector=tcp_connector)
-    api_helper = api_helpers.ApiHelper(config, web_session)
-    for i in config.devices:
-        device = DeviceListener(api_helper, config, i, debug, web_session)
-        devices.append(device)
-        await device.initialize_web_session()
-        tasks.append(loop.create_task(device.loop()))
-        tasks.append(loop.create_task(device.refresh_auth_loop()))
-    signal(SIGTERM, handle_signal)
-    signal(SIGINT, handle_signal)
-    try:
-        await asyncio.gather(*tasks)
-    except KeyboardInterrupt:
-        print("Cancelling tasks and exiting...")
-        await finish(devices, web_session, tcp_connector)
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-    finally:
-        await web_session.close()
-        await tcp_connector.close()
-        loop.close()
-        print("Exited")
-
-
-def main(config, debug):
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main_async(config, debug))
-    loop.close()

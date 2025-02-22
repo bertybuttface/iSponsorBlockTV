@@ -1,4 +1,5 @@
-"""Send out an M-SEARCH request and listening for responses."""
+"""Send out an M-SEARCH request and listening for responses. See LICENSE.md
+Modified code from https://github.com/codingjoe/ssdp/blob/main/ssdp/__main__.py"""
 
 import asyncio
 import socket
@@ -6,47 +7,6 @@ import socket
 import ssdp
 import xmltodict
 from ssdp import network
-
-"""Redistribution and use of the DIAL DIscovery And Launch protocol
-specification (the “DIAL Specification”), with or without modification,
-are permitted provided that the following conditions are met: ●
-Redistributions of the DIAL Specification must retain the above copyright
-notice, this list of conditions and the following disclaimer. ●
-Redistributions of implementations of the DIAL Specification in source code
-form must retain the above copyright notice, this list of conditions and the
-following disclaimer. ● Redistributions of implementations of the DIAL
-Specification in binary form must include the above copyright notice. ● The
-DIAL mark, the NETFLIX mark and the names of contributors to the DIAL
-Specification may not be used to endorse or promote specifications, software,
-products, or any other materials derived from the DIAL Specification without
-specific prior written permission. The DIAL mark is owned by Netflix and
-information on licensing the DIAL mark is available at
-www.dial-multiscreen.org."""
-
-"""
-MIT License
-
-Copyright (c) 2018 Johannes Hoppe
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE."""
-"""Modified code from
-https://github.com/codingjoe/ssdp/blob/main/ssdp/__main__.py"""
 
 
 def get_ip():
@@ -106,10 +66,12 @@ async def find_youtube_app(web_session, url_location):
         return {"screen_id": screen_id, "name": name, "offset": 0}
 
 
-async def discover(web_session):
-    bind = None
-    search_target = "urn:dial-multiscreen-org:service:dial:1"
-    max_wait = 10
+async def discover(
+    web_session,
+    bind=None,
+    search_target="urn:dial-multiscreen-org:service:dial:1",
+    max_wait=10,
+):
     handler = Handler()
     """Send out an M-SEARCH request and listening for responses."""
     family, addr = network.get_best_family(bind, network.PORT)

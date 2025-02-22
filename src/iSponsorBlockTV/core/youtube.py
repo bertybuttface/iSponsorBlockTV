@@ -5,7 +5,7 @@ from typing import Any, List
 import pyytlounge
 from aiohttp import ClientSession
 
-from .constants import youtube_client_blacklist
+from iSponsorBlockTV.constants import youtube_client_blacklist
 
 create_task = asyncio.create_task
 
@@ -182,9 +182,6 @@ class YtLoungeApi(pyytlounge.YtLoungeApi):
         await super()._command(
             "setAutoplayMode", {"autoplayMode": "ENABLED" if enabled else "DISABLED"}
         )
-
-    async def play_video(self, video_id: str) -> bool:
-        return await self._command("setPlaylist", {"videoId": video_id})
 
     # Test to wrap the command function in a mutex to avoid race conditions with
     # the _command_offset (TODO: move to upstream if it works)

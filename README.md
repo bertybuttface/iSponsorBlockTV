@@ -53,8 +53,6 @@ It can also skip/mute YouTube ads.
   device
 - asyncio and [aiohttp](https://github.com/aio-libs/aiohttp)
 - [async-cache](https://github.com/iamsinghrajat/async-cache)
-- [Textual](https://github.com/textualize/textual/) Used for the amazing new
-  graphical configurator
 - [ssdp](https://github.com/codingjoe/ssdp) Used for auto discovery
 
 ## Projects using this project
