@@ -29,5 +29,12 @@ files = ["requirements.txt"]
 requires = ["hatchling", "hatch-requirements-txt"]
 build-backend = "hatchling.build"
 
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4",
+    "pytest-asyncio>=0.25.3",
+    "pytest-cov>=6.0.0",
+]
+
 [tool.black]
 line-length = 88
