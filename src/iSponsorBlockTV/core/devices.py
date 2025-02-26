@@ -103,7 +103,7 @@ class DeviceManager:
 class DeviceListener:
     def __init__(self, api_helper, config, device, debug: bool, web_session):
         self.task: Optional[asyncio.Task] = None
-        self.api_helper = api_helper
+        self.api_helper: ApiHelper = api_helper
         self.offset = device.offset
         self.name = device.name
         self.cancelled = False
@@ -227,13 +227,13 @@ class DeviceListener:
         await self.lounge_controller.disconnect()
         if self.task:
             self.task.cancel()
-        if self.lounge_controller.subscribe_task_watchdog:
-            self.lounge_controller.subscribe_task_watchdog.cancel()
+        if self.lounge_controller.watchdog_task:
+            self.lounge_controller.watchdog_task.cancel()
         if self.lounge_controller.subscribe_task:
             self.lounge_controller.subscribe_task.cancel()
         await asyncio.gather(
             self.task,
-            self.lounge_controller.subscribe_task_watchdog,
+            self.lounge_controller.watchdog_task,
             self.lounge_controller.subscribe_task,
             return_exceptions=True,
         )
