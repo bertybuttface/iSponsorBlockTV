@@ -152,10 +152,6 @@ class YtLoungeApi(pyytlounge.YtLoungeApi):
 
         super()._process_event(event_type, args)
 
-    # Set the volume to a specific value (0-100)
-    async def set_volume(self, volume: int) -> None:
-        await super()._command("setVolume", {"volume": volume})
-
     # Mute/unmute device (no action if already in target state)
     # mute: True=mute, False=unmute
     # override: True=send command regardless of current state
