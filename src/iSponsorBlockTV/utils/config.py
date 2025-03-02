@@ -55,7 +55,7 @@ class Config(BaseModel):
         return self.data_dir / "config.json"
 
     @classmethod
-    def load(cls, data_dir: Path | str) -> 'Config':
+    def load(cls, data_dir: Path | str) -> "Config":
         """Create a Config instance from a directory path."""
         data_dir = Path(data_dir) if isinstance(data_dir, str) else data_dir
         try:
@@ -65,7 +65,7 @@ class Config(BaseModel):
             return cls(data_dir=data_dir)
 
     @classmethod
-    def load_json(cls, json_str: str, data_dir: Path | str) -> 'Config':
+    def load_json(cls, json_str: str, data_dir: Path | str) -> "Config":
         """Load config from a JSON string."""
         data_dir = Path(data_dir) if isinstance(data_dir, str) else data_dir
         try:
@@ -74,12 +74,15 @@ class Config(BaseModel):
             cls._exit_with_message("Invalid JSON")
 
     @classmethod
-    def load_dict(cls, data: dict, data_dir: Path | str) -> 'Config':
+    def load_dict(cls, data: dict, data_dir: Path | str) -> "Config":
         """Load config from a dictionary."""
         data_dir = Path(data_dir) if isinstance(data_dir, str) else data_dir
         from iSponsorBlockTV.constants import config_file_blacklist_keys
-        filtered_data = {k: v for k, v in data.items() if k not in config_file_blacklist_keys}
-        return cls.model_validate({**filtered_data, 'data_dir': data_dir})
+
+        filtered_data = {
+            k: v for k, v in data.items() if k not in config_file_blacklist_keys
+        }
+        return cls.model_validate({**filtered_data, "data_dir": data_dir})
 
     def _handle_missing_config(self) -> None:
         """Handle missing configuration file scenario."""

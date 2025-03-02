@@ -1,4 +1,3 @@
-import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -42,19 +41,19 @@ class TestCLI(unittest.TestCase):
         self.mock_device_manager_instance = mock.MagicMock()
         self.mock_device_manager.return_value = self.mock_device_manager_instance
 
-        # Patch SetupServer
-        self.setup_server_patcher = mock.patch("iSponsorBlockTV.utils.cli.SetupServer")
-        self.mock_setup_server = self.setup_server_patcher.start()
-        self.patchers.append(self.setup_server_patcher)
+        # Patch run_web_server
+        self.web_server_patcher = mock.patch("iSponsorBlockTV.utils.cli.run_web_server")
+        self.mock_run_web_server = self.web_server_patcher.start()
+        self.patchers.append(self.web_server_patcher)
 
-        # Create mock server instance
-        self.mock_server_instance = mock.MagicMock()
-        self.mock_setup_server.return_value = self.mock_server_instance
+        # Patch multiprocessing.Process
+        self.process_patcher = mock.patch("multiprocessing.Process")
+        self.mock_process = self.process_patcher.start()
+        self.patchers.append(self.process_patcher)
 
-        # Patch webbrowser.open
-        self.webbrowser_patcher = mock.patch("iSponsorBlockTV.utils.cli.webbrowser")
-        self.mock_webbrowser = self.webbrowser_patcher.start()
-        self.patchers.append(self.webbrowser_patcher)
+        # Mock Process instance
+        self.mock_process_instance = mock.MagicMock()
+        self.mock_process.return_value = self.mock_process_instance
 
         # Patch logging.basicConfig
         self.logging_patcher = mock.patch("iSponsorBlockTV.utils.cli.logging")
@@ -92,7 +91,9 @@ class TestCLI(unittest.TestCase):
         self.mock_config.validate_config.assert_called_once()
 
         # Verify DeviceManager was initialized with correct args
-        self.mock_device_manager.assert_called_once_with(self.mock_config, False)
+        self.mock_device_manager.assert_called_once_with(
+            self.mock_config, False, watch_config=False
+        )
 
         # Verify run was called
         self.mock_device_manager_instance.run.assert_called_once()
@@ -111,74 +112,79 @@ class TestCLI(unittest.TestCase):
         self.mock_logging.basicConfig.assert_called_once()
 
         # Verify DeviceManager was created with debug=True
-        self.mock_device_manager.assert_called_with(self.mock_config, True)
+        self.mock_device_manager.assert_called_with(
+            self.mock_config, True, watch_config=False
+        )
 
-    def test_config_without_subcommand(self):
-        """Test that 'config' without subcommand shows help."""
-        result = self.runner.invoke(self.cli, ["config"])
-
-        # Verify exit code
-        self.assertEqual(result.exit_code, 0)
-
-        # Verify help text is shown
-        self.assertIn("Configure", result.output)
-
-    def test_config_web_command(self):
-        """Test 'config web' command with default options."""
-        # Invoke CLI with config web command
+    def test_web_flag(self):
+        """Test that --web flag starts both the web server and main app."""
+        # Invoke CLI with web flag
         result = self.runner.invoke(
-            self.cli, ["--data", self.data_dir, "config", "web"]
+            self.cli, ["--data", self.data_dir, "--web", "start"]
         )
 
         # Verify exit code
         self.assertEqual(result.exit_code, 0)
 
-        # Verify SetupServer was instantiated with data_dir
-        self.mock_setup_server.assert_called_once_with(self.data_dir)
-
-        # Verify webbrowser.open was called with the default URL
-        self.mock_webbrowser.open.assert_called_once_with("http://localhost:8080")
-
-        # Verify server.run was called with default options
-        self.mock_server_instance.run.assert_called_once_with(
-            host="localhost", port=8080
+        # Verify Process was created for the web server
+        self.mock_process.assert_called_once()
+        self.mock_process_instance.start.assert_called_once()
+        
+        # Verify watch_config is automatically enabled
+        self.mock_device_manager.assert_called_with(
+            self.mock_config, False, watch_config=True
         )
 
-    def test_config_web_with_options(self):
-        """Test 'config web' with custom port and no-browser flag."""
-        # Invoke CLI with options
+    def test_web_flag_with_port(self):
+        """Test that --web flag with custom port works."""
+        # Invoke CLI with web flag and custom port
+        result = self.runner.invoke(
+            self.cli, ["--data", self.data_dir, "--web", "--port", "9000", "start"]
+        )
+
+        # Verify exit code
+        self.assertEqual(result.exit_code, 0)
+
+        # Verify Process was created with the custom port
+        args = self.mock_process.call_args[1]["args"]
+        self.assertEqual(args[1], 9000)  # Second arg should be the port
+
+    def test_web_command(self):
+        """Test 'web' command with default options."""
+        # Invoke CLI with web command
+        result = self.runner.invoke(
+            self.cli, ["--data", self.data_dir, "web"]
+        )
+
+        # Verify exit code
+        self.assertEqual(result.exit_code, 0)
+
+        # Verify run_web_server was called with correct args
+        self.mock_run_web_server.assert_called_once_with(
+            self.data_dir, 8080, False  # default port, no-browser=False
+        )
+
+    def test_web_command_with_options(self):
+        """Test 'web' command with custom port and no-browser flag."""
+        # Invoke CLI with web command and options
         result = self.runner.invoke(
             self.cli,
-            [
-                "--data",
-                self.data_dir,
-                "config",
-                "web",
-                "--port",
-                "9000",
-                "--no-browser",
-            ],
+            ["--data", self.data_dir, "web", "--port", "9000", "--no-browser"]
         )
 
         # Verify exit code
         self.assertEqual(result.exit_code, 0)
 
-        # Verify SetupServer was instantiated with data_dir
-        self.mock_setup_server.assert_called_once_with(self.data_dir)
-
-        # Verify webbrowser.open was NOT called
-        self.mock_webbrowser.open.assert_not_called()
-
-        # Verify server.run was called with custom port
-        self.mock_server_instance.run.assert_called_once_with(
-            host="localhost", port=9000
+        # Verify run_web_server was called with correct args
+        self.mock_run_web_server.assert_called_once_with(
+            self.data_dir, 9000, True  # custom port, no-browser=True
         )
 
-    def test_config_list_command(self):
-        """Test 'config list' command."""
-        # Invoke CLI with config list command
+    def test_info_command(self):
+        """Test 'info' command."""
+        # Invoke CLI with info command
         result = self.runner.invoke(
-            self.cli, ["--data", self.data_dir, "config", "list"]
+            self.cli, ["--data", self.data_dir, "info"]
         )
 
         # Verify exit code
@@ -194,24 +200,20 @@ class TestCLI(unittest.TestCase):
             f"Devices: {len(self.mock_config.devices)}"
         )
 
-    def test_config_validate_command(self):
-        """Test 'config validate' command."""
-        # Invoke CLI with config validate command
+    def test_watch_config_flag(self):
+        """Test that --watch-config flag enables config watching."""
+        # Invoke CLI with watch-config flag
         result = self.runner.invoke(
-            self.cli, ["--data", self.data_dir, "config", "validate"]
+            self.cli, ["--data", self.data_dir, "--watch-config", "start"]
         )
 
         # Verify exit code
         self.assertEqual(result.exit_code, 0)
 
-        # Verify Config.load was called with data_dir
-        self.mock_config_class.load.assert_called_with(self.data_dir)
-
-        # Verify validate_config was called
-        self.mock_config.validate_config.assert_called_once()
-
-        # Verify success message was shown
-        self.mock_click_echo.assert_called_with("Config valid if no errors shown.")
+        # Verify DeviceManager was created with watch_config=True
+        self.mock_device_manager.assert_called_with(
+            self.mock_config, False, watch_config=True
+        )
 
     @mock.patch("iSponsorBlockTV.utils.cli.cli")
     def test_app_start(self, mock_cli):

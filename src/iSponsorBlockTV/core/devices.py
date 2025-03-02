@@ -1,103 +1,246 @@
 import asyncio
 import logging
 import time
-
-from signal import SIGINT, SIGTERM, signal
-from typing import List, Optional
+from signal import SIGINT, SIGTERM
+from typing import Dict, List, Optional
 
 import aiohttp
 
-from iSponsorBlockTV.core.youtube import YtLoungeApi
 from iSponsorBlockTV.core.sponsorblock import ApiHelper
+from iSponsorBlockTV.core.youtube import YtLoungeApi
+from iSponsorBlockTV.utils.config import Config
+from iSponsorBlockTV.utils.config_watcher import ConfigWatcher
 
 
 class DeviceManager:
-    def __init__(self, config, debug: bool = False):
+    def __init__(self, config, debug: bool = False, watch_config: bool = False):
         self.config = config
         self.debug = debug
+        self.watch_config = watch_config
         self.loop: Optional[asyncio.AbstractEventLoop] = None
         self.tasks: List[asyncio.Task] = []
-        self.devices: List[DeviceListener] = []
+        self.devices: Dict[str, "DeviceListener"] = {}  # Keyed by screen_id
         self.web_session: Optional[aiohttp.ClientSession] = None
         self.tcp_connector: Optional[aiohttp.TCPConnector] = None
         self.api_helper: Optional[ApiHelper] = None
-        
+        self.config_watcher = None
+
+        # Set up logging
         if debug:
             logging.getLogger().setLevel(logging.DEBUG)
+
+    async def reload_config(self):
+        """Reload configuration without stopping anything"""
+        try:
+            logging.info("Reloading configuration")
+            logging.debug(f"Old config: {self.config.model_dump_json(indent=2)}")
+
+            # Load the new configuration
+            new_config = Config.load(self.config.config_file.parent)
+
+            # Update API helper settings
+            await self.update_api_helper(new_config)
+
+            # Update device settings and handle additions/removals
+            await self.update_devices(new_config)
+
+            # Save the new config reference
+            self.config = new_config
+
+            logging.info("Configuration successfully reloaded")
+            logging.debug(f"New config: {self.config.model_dump_json(indent=2)}")
+        except Exception as e:
+            logging.error(f"Error reloading configuration: {e}", exc_info=True)
+
+    async def update_api_helper(self, new_config):
+        """Update API helper with new configuration"""
+        if self.api_helper:
+            self.api_helper.apikey = new_config.apikey
+            self.api_helper.skip_categories = new_config.skip_categories
+            self.api_helper.skip_count_tracking = new_config.skip_count_tracking
+
+    async def update_devices(self, new_config):
+        """Update devices based on new configuration"""
+        # Get current and new device IDs
+        current_device_ids = set(self.devices.keys())
+        new_device_ids = {device.screen_id for device in new_config.devices}
+
+        # Handle removed devices
+        for device_id in current_device_ids - new_device_ids:
+            logging.info(f"Removing device {device_id}")
+            device = self.devices.pop(device_id)
+            await device.cancel()
+
+        # Handle added and updated devices
+        for device_config in new_config.devices:
+            screen_id = device_config.screen_id
+
+            if screen_id in self.devices:
+                # Update existing device
+                device = self.devices[screen_id]
+                logging.info(f"Updating device {screen_id}")
+                device.offset = device_config.offset
+                device.name = device_config.name
+
+                # Update lounge controller settings
+                if device.lounge_controller:
+                    device.lounge_controller.mute_ads = new_config.mute_ads
+                    device.lounge_controller.skip_ads = new_config.skip_ads
+                    device.lounge_controller.auto_play = new_config.auto_play
+            else:
+                # Add new device
+                logging.info(f"Adding new device {screen_id}")
+                await self.add_device(device_config)
+
+    async def add_device(self, device_config):
+        """Add a new device and start its tasks"""
+        try:
+            from iSponsorBlockTV.core.devices import DeviceListener
+
+            device = DeviceListener(
+                self.api_helper,
+                self.config,
+                device_config,
+                self.debug,
+                self.web_session,
+            )
+            await device.initialize_web_session()
+
+            # Add device to our managed devices
+            self.devices[device_config.screen_id] = device
+
+            # Create and track device tasks
+            device_tasks = [
+                self.loop.create_task(device.loop()),
+                self.loop.create_task(device.refresh_auth_loop()),
+            ]
+
+            # Store tasks for cleanup
+            self.tasks.extend(device_tasks)
+
+            logging.info(f"Successfully added device: {device_config.name}")
+        except Exception as e:
+            logging.error(
+                f"Failed to add device {device_config.screen_id}: {e}", exc_info=True
+            )
 
     async def initialize(self):
         """Initialize network resources and create device listeners"""
         self.loop = asyncio.get_event_loop()
         if self.debug:
             self.loop.set_debug(True)
-            
+
+        # Set up network resources
         self.tcp_connector = aiohttp.TCPConnector(ttl_dns_cache=300)
         self.web_session = aiohttp.ClientSession(connector=self.tcp_connector)
         self.api_helper = ApiHelper(self.config, self.web_session)
 
         # Initialize devices
         for device_config in self.config.devices:
-            device = DeviceListener(
-                self.api_helper, 
-                self.config, 
-                device_config, 
-                self.debug,
-                self.web_session
+            await self.add_device(device_config)
+
+        # Set up config watcher if enabled
+        if self.watch_config:
+            self.config_watcher = ConfigWatcher(
+                self.config.config_file, self.reload_config
             )
-            self.devices.append(device)
-            await device.initialize_web_session()
-            
-            # Create device tasks
-            self.tasks.append(self.loop.create_task(device.loop()))
-            self.tasks.append(self.loop.create_task(device.refresh_auth_loop()))
+            # Set the event loop reference
+            self.config_watcher.set_loop(self.loop)
+            self.config_watcher.start()
 
     async def cleanup(self):
         """Clean up all resources"""
-        # Cancel all device tasks
-        await asyncio.gather(
-            *(device.cancel() for device in self.devices), 
-            return_exceptions=True
-        )
-        
+        # Cancel all devices
+        for device in list(self.devices.values()):
+            try:
+                # Create tasks for each device's cancel coroutine
+                self.loop.create_task(device.cancel())
+            except Exception as e:
+                logging.error(f"Error cancelling device: {e}", exc_info=True)
+
+        # Give a moment for devices to start canceling
+        await asyncio.sleep(0.5)
+
         # Cancel all pending tasks
         for task in self.tasks:
-            task.cancel()
-        await asyncio.gather(*self.tasks, return_exceptions=True)
-        
+            if not task.done() and not task.cancelled():
+                try:
+                    task.cancel()
+                except Exception:
+                    pass
+
+        # Wait for all tasks to complete cancellation with timeout
+        if self.tasks:
+            try:
+                # Use asyncio.wait on the task list
+                done, pending = await asyncio.wait(
+                    self.tasks, timeout=5, return_when=asyncio.ALL_COMPLETED
+                )
+
+                # Log any tasks that didn't complete
+                if pending:
+                    logging.warning(
+                        f"{len(pending)} tasks did not complete during cleanup"
+                    )
+            except Exception as e:
+                logging.error(
+                    f"Error waiting for tasks to complete: {e}", exc_info=True
+                )
+
         # Close network resources
         if self.web_session:
             await self.web_session.close()
         if self.tcp_connector:
             await self.tcp_connector.close()
-        if self.loop:
-            self.loop.close()
 
-    def handle_signal(self, signum, frame):
+        # Stop config watcher - only at final shutdown
+        if self.config_watcher:
+            self.config_watcher.stop()
+
+    async def handle_signal(self, termination_future):
         """Handle system signals"""
-        raise KeyboardInterrupt()
+        if not termination_future.done():
+            termination_future.set_result(None)
+        logging.info("Received termination signal, shutting down...")
 
     async def run_async(self):
         """Main async execution loop"""
         try:
             await self.initialize()
-            
+
+            # Create a future to wait for termination signals
+            termination_future = asyncio.Future()
+
             # Set up signal handlers
-            signal(SIGTERM, self.handle_signal)
-            signal(SIGINT, self.handle_signal)
-            
-            # Wait for all tasks to complete
-            await asyncio.gather(*self.tasks)
-            
+            for sig in (SIGTERM, SIGINT):
+                self.loop.add_signal_handler(
+                    sig,
+                    lambda: asyncio.create_task(self.handle_signal(termination_future)),
+                )
+
+            # Wait for termination signal
+            await termination_future
+
         except KeyboardInterrupt:
-            print("Cancelling tasks and exiting...")
+            logging.info("Keyboard interrupt received, shutting down...")
+        except Exception as e:
+            logging.error(f"Unhandled exception in main loop: {e}", exc_info=True)
         finally:
+            # Clean up resources
+            logging.info("Performing cleanup...")
             await self.cleanup()
-            print("Exited")
+            logging.info("Exited cleanly")
 
     def run(self):
         """Main entry point"""
         self.loop = asyncio.get_event_loop()
-        self.loop.run_until_complete(self.run_async())
+        try:
+            self.loop.run_until_complete(self.run_async())
+        except Exception as e:
+            logging.error(f"Fatal error: {e}", exc_info=True)
+        finally:
+            if not self.loop.is_closed():
+                self.loop.close()
 
 
 class DeviceListener:
@@ -223,20 +366,30 @@ class DeviceListener:
         await asyncio.create_task(self.lounge_controller.seek_to(position))
 
     async def cancel(self):
+        """Cancel this device and clean up resources"""
         self.cancelled = True
-        await self.lounge_controller.disconnect()
-        if self.task:
-            self.task.cancel()
-        if self.lounge_controller.watchdog_task:
+
+        # Cancel and cleanup lounge controller
+        if self.lounge_controller.connected():
+            await self.lounge_controller.disconnect()
+
+        # Cancel watchdog task if it exists and isn't done
+        if (
+            self.lounge_controller.watchdog_task
+            and not self.lounge_controller.watchdog_task.done()
+        ):
             self.lounge_controller.watchdog_task.cancel()
-        if self.lounge_controller.subscribe_task:
+
+        # Cancel subscribe task if it exists and isn't done
+        if (
+            self.lounge_controller.subscribe_task
+            and not self.lounge_controller.subscribe_task.done()
+        ):
             self.lounge_controller.subscribe_task.cancel()
-        await asyncio.gather(
-            self.task,
-            self.lounge_controller.watchdog_task,
-            self.lounge_controller.subscribe_task,
-            return_exceptions=True,
-        )
+
+        # Cancel device task if it exists and isn't done
+        if self.task and not self.task.done():
+            self.task.cancel()
 
     async def initialize_web_session(self):
         await self.lounge_controller.change_web_session(self.web_session)
